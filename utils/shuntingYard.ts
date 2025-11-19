@@ -13,8 +13,6 @@ const isLeftAssociative = (char: string): boolean => {
 
 export const generateSteps = (expression: string): AlgorithmResult => {
   // 1. Parse Expression into Tokens
-  // Match numbers/variables (alphanumeric + dots) OR operators
-  // We do not match whitespace, effectively stripping it out
   const regex = /([a-zA-Z0-9.]+|[+\-*/^()])/g;
   const rawTokens = expression.match(regex) || [];
 
@@ -34,7 +32,6 @@ export const generateSteps = (expression: string): AlgorithmResult => {
 
   const steps: StepSnapshot[] = [];
   
-  // Initial State: All in INPUT
   let currentTokenStates: Record<string, { location: TokenLocation; index: number }> = {};
   tokens.forEach((t, i) => {
     currentTokenStates[t.id] = { location: TokenLocation.INPUT, index: i };
@@ -50,16 +47,13 @@ export const generateSteps = (expression: string): AlgorithmResult => {
     });
   };
 
-  // Initial Record
   recordStep('Start', 'Ready to process the expression.', null);
 
   const operatorStack: Token[] = [];
   const outputQueue: Token[] = [];
-  let inputIndex = 0;
 
   // Simulation Loop
   for (const token of tokens) {
-    // 1. Highlight processing token
     recordStep(
       `Read ${token.value}`,
       `Processing token '${token.value}'.`,
@@ -67,42 +61,37 @@ export const generateSteps = (expression: string): AlgorithmResult => {
     );
 
     if (token.type === TokenType.OPERAND) {
-      // Move to Output
       outputQueue.push(token);
       currentTokenStates[token.id] = { location: TokenLocation.OUTPUT, index: outputQueue.length - 1 };
       recordStep(
         `Move ${token.value} to Output`,
-        `Operands like '${token.value}' go directly to the postfix output.`,
+        `Operands go directly to the result.`,
         token.id
       );
     } else if (token.type === TokenType.LEFT_PAREN) {
-      // Push to Stack
       operatorStack.push(token);
       currentTokenStates[token.id] = { location: TokenLocation.STACK, index: operatorStack.length - 1 };
       recordStep(
         `Push ( to Stack`,
-        `Left parentheses are pushed to the stack to wait for a matching closing parenthesis.`,
+        `Parentheses wait in the stack until closed.`,
         token.id
       );
     } else if (token.type === TokenType.RIGHT_PAREN) {
-      // Pop until Left Paren
       let foundLeft = false;
       while (operatorStack.length > 0) {
         const top = operatorStack[operatorStack.length - 1];
         if (top.type === TokenType.LEFT_PAREN) {
           operatorStack.pop();
-          // Discard both parens
           currentTokenStates[top.id] = { location: TokenLocation.DISCARDED, index: 0 };
           currentTokenStates[token.id] = { location: TokenLocation.DISCARDED, index: 0 };
           foundLeft = true;
           recordStep(
             `Discard Parentheses`,
-            `Found matching '(', so both parentheses are discarded.`,
+            `Matching pair found. Both are discarded.`,
             token.id
           );
           break;
         } else {
-          // Pop operator to output
           const popped = operatorStack.pop()!;
           outputQueue.push(popped);
           currentTokenStates[popped.id] = { location: TokenLocation.OUTPUT, index: outputQueue.length - 1 };
@@ -110,10 +99,13 @@ export const generateSteps = (expression: string): AlgorithmResult => {
           
           recordStep(
             `Pop ${popped.value} to Output`,
-            `Popping '${popped.value}' because we hit a closing parenthesis.`,
+            `Inside parentheses, pop '${popped.value}' to output.`,
             popped.id
           );
         }
+      }
+      if (!foundLeft) {
+        throw new Error("Mismatched Parentheses: Missing '('");
       }
     } else if (token.type === TokenType.OPERATOR) {
       while (
@@ -131,7 +123,7 @@ export const generateSteps = (expression: string): AlgorithmResult => {
 
         recordStep(
           `Pop ${popped.value} to Output`,
-          `'${popped.value}' has higher or equal precedence than '${token.value}', so we pop it first.`,
+          `'${popped.value}' (P:${popped.priority}) has higher/equal precedence than '${token.value}' (P:${token.priority}).`,
           popped.id
         );
       }
@@ -141,26 +133,23 @@ export const generateSteps = (expression: string): AlgorithmResult => {
       
       recordStep(
         `Push ${token.value} to Stack`,
-        `Pushing '${token.value}' to the operator stack.`,
+        `Push '${token.value}' (P:${token.priority}) to stack.`,
         token.id
       );
     }
   }
 
-  // Pop remaining
   while (operatorStack.length > 0) {
     const popped = operatorStack.pop()!;
     if (popped.type === TokenType.LEFT_PAREN) {
-        // Mismatched, but just discard
-        currentTokenStates[popped.id] = { location: TokenLocation.DISCARDED, index: 0 };
-    } else {
-        outputQueue.push(popped);
-        currentTokenStates[popped.id] = { location: TokenLocation.OUTPUT, index: outputQueue.length - 1 };
+        throw new Error("Mismatched Parentheses: Missing ')'");
     }
+    outputQueue.push(popped);
+    currentTokenStates[popped.id] = { location: TokenLocation.OUTPUT, index: outputQueue.length - 1 };
     operatorStack.forEach((t, idx) => currentTokenStates[t.id].index = idx);
     recordStep(
       `Pop ${popped.value} to Output`,
-      `End of expression. Popping remaining operator '${popped.value}'.`,
+      `Expression end. Pop remaining '${popped.value}'.`,
       popped.id
     );
   }
