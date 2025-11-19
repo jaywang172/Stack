@@ -19,6 +19,8 @@ export enum TokenLocation {
   DISCARDED = 'DISCARDED',
 }
 
+export type ConversionMode = 'POSTFIX' | 'PREFIX';
+
 // A snapshot of a single token's state at a specific step
 export interface TokenState {
   location: TokenLocation;
@@ -37,6 +39,7 @@ export interface StepSnapshot {
 export interface AlgorithmResult {
   tokens: Token[];
   steps: StepSnapshot[];
+  mode: ConversionMode;
 }
 
 // For Gemini Integration

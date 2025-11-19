@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LayoutGroup, AnimatePresence } from 'framer-motion';
 import { generateSteps } from './utils/shuntingYard';
-import { AlgorithmResult, TokenLocation } from './types';
+import { AlgorithmResult, TokenLocation, ConversionMode } from './types';
 import { TokenComponent } from './components/TokenComponent';
 import { Controls } from './components/Controls';
 import { ExplanationPanel } from './components/ExplanationPanel';
-import { Calculator, Github, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Calculator, Github, AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import clsx from 'clsx';
 
 const DEFAULT_EXPRESSION = "A + B * C - ( D / E )";
 
 const App: React.FC = () => {
   const [expression, setExpression] = useState(DEFAULT_EXPRESSION);
+  const [mode, setMode] = useState<ConversionMode>('POSTFIX');
   const [result, setResult] = useState<AlgorithmResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -19,7 +21,7 @@ const App: React.FC = () => {
   
   const timerRef = useRef<number | null>(null);
 
-  // Re-run algorithm when expression changes
+  // Re-run algorithm when expression or mode changes
   useEffect(() => {
     if (!expression.trim()) {
         setResult(null);
@@ -27,7 +29,7 @@ const App: React.FC = () => {
         return;
     }
     try {
-      const newResult = generateSteps(expression);
+      const newResult = generateSteps(expression, mode);
       setResult(newResult);
       setError(null);
       setCurrentStep(0);
@@ -36,7 +38,7 @@ const App: React.FC = () => {
       setResult(null);
       setError(e.message || "Invalid Expression");
     }
-  }, [expression]);
+  }, [expression, mode]);
 
   // Auto-play logic
   useEffect(() => {
@@ -88,10 +90,14 @@ const App: React.FC = () => {
      stackTokens.sort((a, b) => currentSnapshot.tokenStates[a.id].index - currentSnapshot.tokenStates[b.id].index);
      outputTokens.sort((a, b) => currentSnapshot.tokenStates[a.id].index - currentSnapshot.tokenStates[b.id].index);
 
-     // Current postfix string for display
-     const currentPostfix = outputTokens.map(t => t.value).join(' ');
+     // Current output string (for Prefix, we need to reverse it for the Final Result display, but the queue shows building process)
+     let resultString = outputTokens.map(t => t.value).join(' ');
+     if (mode === 'PREFIX') {
+         // For display in the "Final Result" box, prefix is the reverse of the output queue
+         resultString = outputTokens.map(t => t.value).reverse().join(' ');
+     }
 
-     return { inputTokens, stackTokens, outputTokens, currentPostfix };
+     return { inputTokens, stackTokens, outputTokens, resultString };
   };
 
   const tokenData = renderTokens();
@@ -108,7 +114,7 @@ const App: React.FC = () => {
             <h1 className="text-lg font-bold tracking-tight text-white">Shunting Yard Visualizer</h1>
           </div>
           <div className="flex items-center gap-4">
-            <span className="hidden sm:block text-slate-500 text-sm font-mono">Infix to Postfix</span>
+            <span className="hidden sm:block text-slate-500 text-sm font-mono">Infix to {mode === 'POSTFIX' ? 'Postfix' : 'Prefix'}</span>
             <a href="#" className="text-slate-400 hover:text-white transition-colors">
                 <Github size={20} />
             </a>
@@ -118,9 +124,34 @@ const App: React.FC = () => {
 
       <main className="flex-1 flex flex-col items-center p-6 gap-8">
         
-        {/* Input Section */}
-        <div className="w-full max-w-2xl">
-          <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Infix Expression</label>
+        {/* Input Section with Mode Switch */}
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-500 uppercase ml-1">Infix Expression</label>
+            
+            {/* Mode Toggle */}
+            <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                <button 
+                    onClick={() => setMode('POSTFIX')}
+                    className={clsx(
+                        "px-4 py-1.5 text-xs font-bold rounded-md transition-all",
+                        mode === 'POSTFIX' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-white"
+                    )}
+                >
+                    Postfix
+                </button>
+                <button 
+                    onClick={() => setMode('PREFIX')}
+                    className={clsx(
+                        "px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1",
+                        mode === 'PREFIX' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-white"
+                    )}
+                >
+                    Prefix
+                </button>
+            </div>
+          </div>
+
           <div className="relative group">
             <input
               type="text"
@@ -150,7 +181,10 @@ const App: React.FC = () => {
                 
                 {/* Input Queue */}
                 <div className="flex flex-col gap-4">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Input Queue</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Input Queue</h3>
+                        {mode === 'PREFIX' && <span className="text-[10px] px-2 py-0.5 bg-indigo-900/50 text-indigo-300 rounded border border-indigo-500/30">Reversed</span>}
+                    </div>
                     <div className="flex-1 bg-slate-950/50 rounded-2xl border border-dashed border-slate-800 p-4 flex flex-wrap content-start gap-3">
                     <AnimatePresence>
                         {tokenData.inputTokens.map((token, i) => (
@@ -199,7 +233,9 @@ const App: React.FC = () => {
 
                 {/* Output Queue */}
                 <div className="flex flex-col gap-4">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Postfix Output</h3>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center">
+                        {mode === 'PREFIX' ? 'Temp Output' : 'Postfix Output'}
+                    </h3>
                     <div className="flex-1 bg-slate-950/50 rounded-2xl border border-slate-800 p-4 flex flex-wrap content-start gap-3 shadow-inner">
                     <AnimatePresence>
                         {tokenData.outputTokens.map((token, i) => (
@@ -237,9 +273,12 @@ const App: React.FC = () => {
 
             {/* Live Result Display */}
             <div className="w-full max-w-2xl bg-slate-900/80 backdrop-blur border border-slate-700 rounded-xl px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-lg">
-                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Current Postfix Output</span>
+                <div className="flex flex-col">
+                    <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Current {mode === 'POSTFIX' ? 'Postfix' : 'Prefix'} Output</span>
+                    {mode === 'PREFIX' && <span className="text-[10px] text-indigo-400">(Output Reversed)</span>}
+                </div>
                 <div className="font-mono text-xl text-emerald-400 font-bold break-all text-right">
-                {tokenData.currentPostfix || <span className="text-slate-700 opacity-50">Waiting to start...</span>}
+                {tokenData.resultString || <span className="text-slate-700 opacity-50">Waiting to start...</span>}
                 </div>
             </div>
 
