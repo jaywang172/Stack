@@ -1,0 +1,5 @@
+{
+  "name": "Infix to Postfix Animator",
+  "description": "An interactive, animated visualization of the Shunting-yard algorithm converting Infix expressions to Postfix notation.",
+  "requestFramePermissions": []
+}
